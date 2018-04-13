@@ -1,0 +1,60 @@
+
+def closestPoint(p, points):
+    bestIndex = 0
+    closest = float("+inf")
+    for i in range(len(points)):
+        dist = distanceSquared(p,points[i])
+        if dist < closest:
+            closest = dist
+            bestIndex = i
+    return bestIndex
+
+
+
+def distanceSquared(p1,p2):  
+    return (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2
+
+
+def addPoints(p1,p2):
+    return [p1[0] + p2[0], p1[1] + p2[1]]
+
+
+filename = "/loudacre/devicestatus_etl/*"
+    
+
+K = 5
+
+
+convergeDist = .1
+
+
+
+devices=sc.textFile(filename)
+
+
+lonlat=devices.map(lambda x: (x.split(',')[4].encode("ascii")[3:-2],x.split(',')[5].encode("ascii")[3:-2]))
+lonlatfiltered=lonlat.filter(lambda (x,y): ((len(x)!=0 and len(y)!=0 ) and (x!='0' or y!='0')))
+lonlatfinal=lonlatfiltered.map(lambda (x,y):(float(x),float(y)))
+ksamples=lonlatfinal.takeSample(True, K)
+                                                     
+
+#print ksamples
+
+countr=0
+tempDist = float("+inf")
+while tempDist > convergeDist:
+	countr+=1
+	stage1=lonlatfinal.map(lambda x: (closestPoint(x,ksamples),(x,1)))
+	stage2=stage1.reduceByKey(lambda (p1,z1),(p2,z2):(addPoints(p1,p2),z1+z2))
+	stage3=stage2.map(lambda (i,(x,z)):(i,(x[0]/z,x[1]/z))).sortByKey()
+	newksamples=stage3.values().collect()
+	tempDist=0
+	for i in range(len(newksamples)):
+		tempDist+=(distanceSquared(ksamples[i],newksamples[i]))**0.5
+	ksamples=newksamples
+	#print ksamples
+
+print ksamples
+print "In ",countr," iterations"
+
+
